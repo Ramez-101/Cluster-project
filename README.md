@@ -51,7 +51,7 @@ A complete Python implementation of **15 clustering algorithms** — including 1
 ## 2. Project Structure
 
 ```
-E:\cv\
+E:\Cluster-project\
 │
 ├── algorithms/                     ← All CI/EC metaheuristic algorithms
 │   ├── __init__.py
@@ -120,7 +120,7 @@ Or download manually from Kaggle and place `marketing_campaign.csv` in the `data
 
 ## 4. Setup & Installation
 
-**Requirements:** Python 3.10+ with the virtual environment already configured at `E:\cv\.venv`.
+**Requirements:** Python 3.10+ with the virtual environment already configured at `E:\Cluster-project\.venv`.
 
 ```bash
 # Activate the virtual environment (Windows)
