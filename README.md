@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 # Clustering-Based Customer Segmentation with CI/EC Algorithms
 
 A complete Python implementation of **15 clustering algorithms** — including 11 Computational Intelligence / Evolutionary Computation (CI/EC) metaheuristics and 4 classical baselines — applied to customer personality segmentation. Includes both a command-line runner and a full interactive web dashboard.
