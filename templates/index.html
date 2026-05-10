@@ -146,6 +146,19 @@ html,body{height:100%;overflow:hidden;font-family:'Inter',system-ui,sans-serif;b
 .param-name{font-size:11.5px;color:var(--text-2)}
 .param-val{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-2);font-weight:500}
 input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
+/* ── Execution toggles ─────────────────────────────────────────────────── */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:5px 2px}
+.toggle-label{font-size:11.5px;color:var(--text-2);display:flex;align-items:center;gap:5px}
+.toggle-switch{position:relative;display:inline-block;width:36px;height:20px;flex-shrink:0}
+.toggle-switch input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;cursor:pointer;inset:0;background:var(--border2);border-radius:99px;transition:.2s}
+.toggle-slider:before{content:'';position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
+input:checked+.toggle-slider{background:var(--accent)}
+input:checked+.toggle-slider:before{transform:translateX(16px)}
+input:disabled+.toggle-slider{opacity:.4;cursor:not-allowed}
+.badge-gpu{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;font-size:11px;font-weight:600;white-space:nowrap}
+.badge-gpu.on {background:#0a2016;color:#34d399;border:1px solid #1a5c3a}
+.badge-gpu.off{background:#1a1a2e;color:#8b9ab5;border:1px solid var(--border2)}
 .seed-input{
   width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text);
   border-radius:var(--radius-sm);padding:5px 9px;font-size:12px;font-family:'JetBrains Mono',monospace;
@@ -343,17 +356,28 @@ td.worst{color:#f87171}
       <div class="brand-icon"><i class="bi bi-diagram-3-fill"></i></div>
       Clustering Lab
     </div>
-    <div style="margin-top:10px">
+    <div class="section-lbl" style="margin-top:12px">Dataset</div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <select id="datasetSelect" class="seed-input" style="flex:1;padding:5px 8px">
+        {% for ds in datasets %}
+        <option value="{{ ds.path }}"{% if ds.path == default_dataset %} selected{% endif %}>{{ ds.name }}</option>
+        {% endfor %}
+      </select>
+      <button class="qs-btn" id="previewBtn" onclick="openDatasetPreview()"
+              style="padding:5px 10px;white-space:nowrap">
+        <i class="bi bi-eye"></i> Preview
+      </button>
+    </div>
+    <div id="datasetStatusWrap" style="margin-top:8px">
       {% if data_exists %}
       <span class="status-pill ok"><span class="dot pulse"></span>Dataset ready</span>
       {% else %}
-      <span class="status-pill err"><span class="dot"></span>Dataset missing</span>
+      <span class="status-pill err"><span class="dot"></span>No datasets found</span>
       {% endif %}
     </div>
     {% if not data_exists %}
     <div style="font-size:11px;color:var(--red);margin-top:8px;line-height:1.5">
-      Place <code>marketing_campaign.csv</code> in <code>data/</code>.<br>
-      <code style="font-size:10px">kaggle datasets download -d imakash3011/customer-personality-analysis -p data/ --unzip</code>
+      Place CSV files in <code>data/</code>.
     </div>
     {% endif %}
   </div>
@@ -425,6 +449,59 @@ td.worst{color:#f87171}
       <div class="param-head"><span class="param-name">Random Seed</span></div>
       <input class="seed-input" type="number" id="p_seed" value="42">
     </div>
+    <div class="param-block">
+      <div class="param-head">
+        <span class="param-name">Number of Seeds</span>
+        <span class="param-val" id="v_nseeds">1</span>
+      </div>
+      <input type="range" min="1" max="20" step="1" value="1" id="p_nseeds"
+             oninput="setVal('nseeds',this.value)">
+      <div style="font-size:10px;color:var(--text-3);margin-top:3px">
+        Runs each algorithm N times and shows the average ± std deviation
+      </div>
+    </div>
+
+    <!-- Execution options -->
+    <div class="section-lbl" style="margin-top:18px">Execution</div>
+
+    <div class="param-block">
+      <div class="toggle-row">
+        <span class="toggle-label">
+          <i class="bi bi-gpu-card" style="color:var(--cyan)"></i>GPU Acceleration
+        </span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="useGpuToggle" checked onchange="onGpuToggle()">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div id="gpuStatusBadge" style="margin-top:5px;font-size:11px;color:var(--text-3)">
+        Checking GPU…
+      </div>
+    </div>
+
+    <div class="param-block">
+      <div class="toggle-row">
+        <span class="toggle-label">
+          <i class="bi bi-cpu" style="color:var(--amber)"></i>Parallel Algorithms
+        </span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="parallelToggle" onchange="onParallelToggle()">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="param-block" id="workersBlock" style="display:none">
+      <div class="param-head">
+        <span class="param-name">Workers</span>
+        <span class="param-val" id="v_workers">3</span>
+      </div>
+      <input type="range" min="1" max="12" step="1" value="3" id="p_workers"
+             oninput="setVal('workers',this.value)">
+      <div style="font-size:10px;color:var(--text-3);margin-top:3px">
+        Parallel algorithm threads (1–12)
+      </div>
+    </div>
 
   </div><!-- sidebar-scroll -->
 
@@ -447,7 +524,10 @@ td.worst{color:#f87171}
   <div class="topbar">
     <span class="page-title" id="pageTitle">Customer Segmentation Report</span>
     <div class="topbar-meta" id="topMeta">
-      <span class="meta-item"><i class="bi bi-cpu"></i> CI/EC Clustering Dashboard</span>
+      <span id="topbarGpuBadge" class="badge-gpu off">
+        <i class="bi bi-cpu"></i> CPU Only
+      </span>
+      <span class="meta-item"><i class="bi bi-diagram-3"></i> CI/EC Clustering Dashboard</span>
     </div>
   </div>
 
@@ -491,6 +571,20 @@ td.worst{color:#f87171}
       <!-- Info bar + export -->
       <div class="info-bar" id="infoBar">
         <span style="color:var(--text-3);font-size:11px">Loading…</span>
+      </div>
+
+      <!-- Seed view selector — shown only when num_seeds > 1 -->
+      <div id="seedSelectorWrap" style="display:none;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:12px;
+                    background:var(--surface);border:1px solid var(--border);
+                    border-radius:var(--radius);padding:10px 18px">
+          <i class="bi bi-shuffle" style="color:var(--accent-2)"></i>
+          <span style="font-size:12px;color:var(--text-2);white-space:nowrap">View seed:</span>
+          <select id="seedViewSelect" class="seed-input"
+                  style="width:auto;min-width:180px"
+                  onchange="onSeedViewChange(this.value)"></select>
+          <span id="seedViewNote" style="font-size:11px;color:var(--text-3)"></span>
+        </div>
       </div>
 
       <!-- Tabs -->
@@ -579,6 +673,7 @@ td.worst{color:#f87171}
       <div class="tab-panel" id="tab-scatter">
         <div class="card-dark">
           <div class="card-title"><i class="bi bi-circle-half"></i> PCA 2D Scatter — All Algorithms</div>
+          <div id="scatterSeedNote" style="font-size:11px;color:var(--text-3);margin-bottom:10px">PCA scatter from best WCSS seed</div>
           <img id="pcaImg" src="" alt="PCA scatter" style="width:100%;border-radius:6px;border:1px solid var(--border)">
         </div>
       </div>
@@ -639,15 +734,15 @@ function toggleCheck(id){
   updateSelCount();
 }
 function updateSelCount(){
-  const n = document.querySelectorAll('[type=checkbox]:checked').length;
+  const n = document.querySelectorAll('.group-body [type=checkbox]:checked').length;
   document.getElementById('selCount').textContent = n;
 }
 function selectAll(){
-  document.querySelectorAll('[type=checkbox]').forEach(c=>c.checked=true);
+  document.querySelectorAll('.group-body [type=checkbox]').forEach(c=>c.checked=true);
   updateSelCount();
 }
 function selectNone(){
-  document.querySelectorAll('[type=checkbox]').forEach(c=>c.checked=false);
+  document.querySelectorAll('.group-body [type=checkbox]').forEach(c=>c.checked=false);
   updateSelCount();
 }
 function selectGroup(grp){
@@ -669,6 +764,50 @@ document.querySelectorAll('.group-body').forEach(b=>b.style.maxHeight=b.scrollHe
 function setVal(k,v){
   document.getElementById('v_'+k).textContent = v;
 }
+
+// ── GPU info ──────────────────────────────────────────────────────────────────
+let _gpuAvailable = false;
+
+function initGpuInfo(){
+  fetch('/api/gpu_info').then(r=>r.json()).then(info=>{
+    _gpuAvailable = info.available;
+    const toggle   = document.getElementById('useGpuToggle');
+    const badge    = document.getElementById('gpuStatusBadge');
+    const topBadge = document.getElementById('topbarGpuBadge');
+    if(info.available){
+      const label = `${info.name} · ${info.memory_gb} GB VRAM`;
+      badge.innerHTML = `<span class="badge-gpu on"><i class="bi bi-gpu-card"></i> ${label}</span>`;
+      topBadge.className = 'badge-gpu on';
+      topBadge.innerHTML = `<i class="bi bi-gpu-card"></i> ${info.name}`;
+    } else {
+      badge.innerHTML = `<span class="badge-gpu off"><i class="bi bi-cpu"></i> No GPU — using CPU</span>`;
+      topBadge.className = 'badge-gpu off';
+      topBadge.innerHTML = `<i class="bi bi-cpu"></i> CPU Only`;
+      toggle.checked  = false;
+      toggle.disabled = true;
+    }
+  }).catch(()=>{
+    document.getElementById('gpuStatusBadge').textContent = 'GPU status unknown';
+  });
+}
+
+function onGpuToggle(){
+  const on       = _gpuAvailable && document.getElementById('useGpuToggle').checked;
+  const topBadge = document.getElementById('topbarGpuBadge');
+  if(on){
+    topBadge.className = 'badge-gpu on';
+  } else {
+    topBadge.className = 'badge-gpu off';
+    topBadge.innerHTML = `<i class="bi bi-cpu"></i> CPU Only`;
+  }
+}
+
+function onParallelToggle(){
+  const on = document.getElementById('parallelToggle').checked;
+  document.getElementById('workersBlock').style.display = on ? 'block' : 'none';
+}
+
+initGpuInfo();
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let currentJobId = null;
@@ -695,7 +834,7 @@ function showView(id){
 
 // ── Run ───────────────────────────────────────────────────────────────────────
 function startRun(){
-  const sel = [...document.querySelectorAll('[type=checkbox]:checked')].map(c=>c.value);
+  const sel = [...document.querySelectorAll('.group-body [type=checkbox]:checked')].map(c=>c.value);
   if(!sel.length){ toast('Select at least one algorithm.','error'); return; }
 
   showView('viewRunning');
@@ -707,11 +846,16 @@ function startRun(){
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({
-      algorithms:sel,
-      k:    +document.getElementById('p_k').value,
-      max_iter: +document.getElementById('p_iter').value,
-      pop_size: +document.getElementById('p_pop').value,
-      seed: +document.getElementById('p_seed').value,
+      algorithms:   sel,
+      k:            +document.getElementById('p_k').value,
+      max_iter:     +document.getElementById('p_iter').value,
+      pop_size:     +document.getElementById('p_pop').value,
+      seed:         +document.getElementById('p_seed').value,
+      num_seeds:    +document.getElementById('p_nseeds').value,
+      dataset_path: document.getElementById('datasetSelect').value,
+      use_gpu:      _gpuAvailable && document.getElementById('useGpuToggle').checked,
+      parallel:     document.getElementById('parallelToggle').checked,
+      n_workers:    +document.getElementById('p_workers').value,
     })
   })
   .then(r=>r.json())
@@ -791,7 +935,7 @@ function exportCSV(){
 // ── Render results ────────────────────────────────────────────────────────────
 function renderResults(data){
   resultsData = data;
-  const {metrics,convergence,cluster_sizes,latency,pca_img,profile_img,
+  const {metrics,metrics_std,num_seeds,seeds_used,convergence,cluster_sizes,latency,pca_img,profile_img,
          best_wcss,best_acc,best_sil,best_ch,best_db,n_samples,n_features,n_clusters,max_iter} = data;
   const algos = Object.keys(metrics.wcss||{});
 
@@ -804,12 +948,14 @@ function renderResults(data){
     {icon:'⚡', label:'Highest CH Score',   winner:best_ch,   metric:'calinski_harabasz', lower:false},
   ];
   document.getElementById('metricCards').innerHTML = cards.map(c=>{
-    const v = metrics[c.metric]?.[c.winner];
-    const fmt = v==null?'N/A':(c.metric==='calinski_harabasz'||c.metric==='wcss'?
-      (+v).toFixed(1):(+v).toFixed(4));
-    return `<div class="metric-card">
+    const noData = c.winner == null;
+    const v   = noData ? null : metrics[c.metric]?.[c.winner];
+    const fmt = v == null ? 'N/A' : (c.metric==='calinski_harabasz'||c.metric==='wcss'
+      ? (+v).toFixed(1) : (+v).toFixed(4));
+    const winnerLabel = noData ? 'N/A' : c.winner;
+    return `<div class="metric-card"${noData?' style="opacity:.45"':''}>
       <div class="mc-icon">${c.icon}</div>
-      <div class="mc-winner" title="${c.winner}">${c.winner}</div>
+      <div class="mc-winner" title="${winnerLabel}">${winnerLabel}</div>
       <div class="mc-label">${c.label}</div>
       <div class="mc-score">${fmt}</div>
     </div>`;
@@ -817,12 +963,17 @@ function renderResults(data){
 
   // ── Info bar ──────────────────────────────────────────────────────────────
   const totalTime = Object.values(latency).reduce((s,v)=>s+v,0);
+  const ns = num_seeds || 1;
+  const seedLabel = ns > 1
+    ? `Seeds ${seeds_used[0]}–${seeds_used[seeds_used.length-1]} (avg of ${ns})`
+    : `Seed ${seeds_used ? seeds_used[0] : '?'}`;
   document.getElementById('infoBar').innerHTML = `
     <span class="info-item"><i class="bi bi-people" style="color:var(--cyan)"></i><strong>${n_samples}</strong> customers</span>
     <span class="info-item"><i class="bi bi-list-columns" style="color:var(--purple)"></i><strong>${n_features}</strong> features</span>
     <span class="info-item"><i class="bi bi-diagram-3" style="color:var(--accent-2)"></i><strong>${n_clusters}</strong> clusters</span>
     <span class="info-item"><i class="bi bi-arrow-repeat" style="color:var(--green)"></i><strong>${max_iter}</strong> iterations</span>
     <span class="info-item"><i class="bi bi-cpu" style="color:var(--amber)"></i><strong>${algos.length}</strong> algorithms</span>
+    <span class="info-item"><i class="bi bi-shuffle" style="color:var(--accent-2)"></i><strong>${seedLabel}</strong></span>
     <span class="info-item"><i class="bi bi-clock" style="color:var(--text-3)"></i><strong>${totalTime.toFixed(1)}s</strong> total</span>
   `;
 
@@ -834,9 +985,13 @@ function renderResults(data){
 
   showView('viewResults');
   document.getElementById('runBtn').disabled = false;
-  toast(`Analysis complete — ${algos.length} algorithms compared`,'success');
+  const doneMsg = ns > 1
+    ? `Analysis complete — ${algos.length} algorithms × ${ns} seeds`
+    : `Analysis complete — ${algos.length} algorithms compared`;
+  toast(doneMsg,'success');
 
   // Render all components
+  buildSeedSelector(data);
   renderTable(data);
   renderLatency(latency);
   renderConvergence(convergence);
@@ -848,8 +1003,10 @@ function renderResults(data){
 
 // ── Render table ──────────────────────────────────────────────────────────────
 function renderTable(data){
-  const {metrics,latency,best_wcss,best_acc,best_sil,best_ch,best_db} = data;
-  const algos = Object.keys(metrics.wcss||{});
+  const {metrics,metrics_std,num_seeds,latency,best_wcss,best_acc,best_sil,best_ch,best_db} = data;
+  const algos  = Object.keys(metrics.wcss||{});
+  const mstd   = metrics_std || {};
+  const ns     = num_seeds || 1;
 
   // Build sortable row data
   const rows = algos.map(a=>({
@@ -860,6 +1017,13 @@ function renderTable(data){
     db:   metrics.davies_bouldin?.[a],
     ch:   metrics.calinski_harabasz?.[a],
     time: latency[a],
+    // std values
+    wcss_s: mstd.wcss?.[a],
+    acc_s:  mstd.accuracy?.[a],
+    sil_s:  mstd.silhouette?.[a],
+    db_s:   mstd.davies_bouldin?.[a],
+    ch_s:   mstd.calinski_harabasz?.[a],
+    time_s2: mstd.time_s?.[a],
   }));
 
   // Sort
@@ -878,10 +1042,8 @@ function renderTable(data){
   const bests={}, worsts={};
   cols.forEach(c=>{
     const vals=rows.map(r=>r[c]).filter(v=>v!=null);
-    if(!vals.length){
-      bests[c] = null;
-      worsts[c] = null;
-    } else {
+    if(!vals.length){ bests[c]=null; worsts[c]=null; }
+    else {
       bests[c]  = lower[c]?Math.min(...vals):Math.max(...vals);
       worsts[c] = lower[c]?Math.max(...vals):Math.min(...vals);
     }
@@ -895,21 +1057,27 @@ function renderTable(data){
   document.getElementById('mainTbody').innerHTML = rows.map(r=>{
     const rank=rankMap[r.algo];
     const rankCls=rank===1?'r1':rank===2?'r2':rank===3?'r3':'';
-    const cell=(key,v,lower2,isTime=false)=>{
+
+    const cell=(key,v,std,lower2,isTime=false)=>{
       if(v==null) return `<td class="mono" style="color:var(--text-3)">—</td>`;
       const fv=isTime?v.toFixed(3):(key==='ch'||key==='wcss')?v.toFixed(1):v.toFixed(4);
-      const cls=bests[key]!==null && v===bests[key]?'best mono':worsts[key]!==null && v===worsts[key]?'worst mono':'mono';
-      return `<td class="${cls}">${fv}</td>`;
+      const cls=bests[key]!==null && v===bests[key]?'best mono':
+                worsts[key]!==null && v===worsts[key]?'worst mono':'mono';
+      const stdHtml = (ns>1 && std!=null)
+        ? `<div style="font-size:10px;color:var(--text-3);line-height:1">± ${std.toFixed(isTime?4:(key==='ch'||key==='wcss')?2:4)}</div>`
+        : '';
+      return `<td class="${cls}" style="vertical-align:middle">${fv}${stdHtml}</td>`;
     };
+
     return `<tr>
       <td><span class="rank ${rankCls}">${rank}</span></td>
       <td class="algo-name">${r.algo}</td>
-      ${cell('wcss',r.wcss,true)}
-      ${cell('acc',r.acc,false)}
-      ${cell('sil',r.sil,false)}
-      ${cell('db',r.db,true)}
-      ${cell('ch',r.ch,false)}
-      ${cell('time',r.time,true,true)}
+      ${cell('wcss',r.wcss,r.wcss_s,true)}
+      ${cell('acc', r.acc, r.acc_s, false)}
+      ${cell('sil', r.sil, r.sil_s, false)}
+      ${cell('db',  r.db,  r.db_s,  true)}
+      ${cell('ch',  r.ch,  r.ch_s,  false)}
+      ${cell('time',r.time,r.time_s2,true,true)}
     </tr>`;
   }).join('');
 }
@@ -1041,8 +1209,143 @@ function renderClusterSizes(cluster_sizes, k){
   });
 }
 
+// ── Dataset picker ────────────────────────────────────────────────────────────
+let _previewModal = null;
+
+function openDatasetPreview(){
+  const path = document.getElementById('datasetSelect').value;
+  if(!path){ toast('No dataset selected.','error'); return; }
+  document.getElementById('datasetPreviewBody').innerHTML =
+    '<div style="text-align:center;padding:40px;color:var(--text-3)">Loading preview…</div>';
+  if(!_previewModal)
+    _previewModal = new bootstrap.Modal(document.getElementById('datasetPreviewModal'));
+  _previewModal.show();
+  fetch(`/api/dataset-preview?path=${encodeURIComponent(path)}`)
+    .then(r=>r.json()).then(renderDatasetPreview)
+    .catch(e=>{
+      document.getElementById('datasetPreviewBody').innerHTML =
+        `<p style="color:var(--red)">Failed to load: ${e}</p>`;
+    });
+}
+
+function renderDatasetPreview(data){
+  if(data.error){
+    document.getElementById('datasetPreviewBody').innerHTML =
+      `<p style="color:var(--red)">${data.error}</p>`; return;
+  }
+  const colHdr = data.columns.map(c=>
+    `<th style="font-size:10.5px;padding:8px 12px;white-space:nowrap">${c}</th>`).join('');
+  const rows = data.preview_rows.map(row=>
+    `<tr>${row.map(v=>`<td style="font-size:11.5px;padding:6px 12px">${v}</td>`).join('')}</tr>`
+  ).join('');
+  document.getElementById('datasetPreviewBody').innerHTML = `
+    <div class="info-bar" style="margin-bottom:16px">
+      <span class="info-item"><strong>${data.name}</strong></span>
+      <span class="info-item"><strong>${data.n_rows.toLocaleString()}</strong> rows</span>
+      <span class="info-item"><strong>${data.n_cols}</strong> columns</span>
+      <span class="info-item">Target: <strong>${data.target_name||'none'}</strong></span>
+    </div>
+    <div class="tbl-wrap" style="max-height:340px;overflow:auto">
+      <table><thead><tr>${colHdr}</tr></thead><tbody>${rows}</tbody></table>
+    </div>
+    <p style="margin-top:12px;font-size:11px;color:var(--text-3)">
+      Showing first 5 of ${data.n_rows.toLocaleString()} rows.</p>`;
+}
+
+// ── Seed view switcher ────────────────────────────────────────────────────────
+let _seedViewMode = 'average';
+
+function buildSeedSelector(data){
+  const wrap = document.getElementById('seedSelectorWrap');
+  const sel  = document.getElementById('seedViewSelect');
+  if(!data.per_seed_data || data.num_seeds <= 1){
+    wrap.style.display = 'none'; return;
+  }
+  wrap.style.display = 'block';
+  _seedViewMode = 'average';
+  const seeds = data.per_seed_data.seeds;
+  sel.innerHTML =
+    `<option value="average">Average (all ${seeds.length} seeds)</option>` +
+    seeds.map(s=>`<option value="${s}">Seed ${s}</option>`).join('');
+  sel.value = 'average';
+  document.getElementById('seedViewNote').textContent =
+    `Seeds ${seeds[0]}–${seeds[seeds.length-1]}`;
+}
+
+function onSeedViewChange(val){
+  _seedViewMode = val === 'average' ? 'average' : parseInt(val, 10);
+  applySeedView(resultsData);
+}
+
+function applySeedView(data){
+  if(!data) return;
+  if(_seedViewMode === 'average' || !data.per_seed_data){
+    renderTable(data);
+    renderLatency(data.latency);
+    renderConvergence(data.convergence);
+    renderMetricBars(data.metrics, Object.keys(data.metrics.wcss||{}));
+  } else {
+    const sd = data.per_seed_data.by_seed[_seedViewMode];
+    if(!sd){ toast(`No data for seed ${_seedViewMode}`, 'error'); return; }
+    const synth = {
+      metrics:     sd.metrics,
+      metrics_std: {},
+      num_seeds:   1,
+      latency:     sd.latency,
+      best_wcss:   _argMin(sd.metrics.wcss),
+      best_acc:    _argMax(sd.metrics.accuracy),
+      best_sil:    _argMax(sd.metrics.silhouette),
+      best_ch:     _argMax(sd.metrics.calinski_harabasz),
+      best_db:     _argMin(sd.metrics.davies_bouldin),
+    };
+    renderTable(synth);
+    renderLatency(sd.latency);
+    renderConvergence(sd.convergence);
+    renderMetricBars(sd.metrics, Object.keys(sd.metrics.wcss||{}));
+  }
+  const note = document.getElementById('scatterSeedNote');
+  if(note) note.textContent = _seedViewMode === 'average'
+    ? 'PCA scatter from best WCSS seed'
+    : 'PCA scatter always shows best-WCSS seed (not generated per seed)';
+}
+
+function _argMin(obj){
+  if(!obj) return null;
+  return Object.entries(obj).reduce((b,[k,v])=>
+    v!==null&&(b[1]===null||v<b[1])?[k,v]:b, [null,null])[0];
+}
+function _argMax(obj){
+  if(!obj) return null;
+  return Object.entries(obj).reduce((b,[k,v])=>
+    v!==null&&(b[1]===null||v>b[1])?[k,v]:b, [null,null])[0];
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 updateSelCount();
 </script>
+
+<!-- ═══════════════════ DATASET PREVIEW MODAL ═══════════════════ -->
+<div class="modal fade" id="datasetPreviewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content"
+         style="background:var(--surface);border:1px solid var(--border2);color:var(--text)">
+      <div class="modal-header" style="border-bottom:1px solid var(--border)">
+        <h5 class="modal-title" style="font-size:14px;font-weight:600">
+          <i class="bi bi-table me-2" style="color:var(--cyan)"></i>Dataset Preview
+        </h5>
+        <button type="button" class="btn-close btn-close-white"
+                data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="datasetPreviewBody"></div>
+      <div class="modal-footer" style="border-top:1px solid var(--border)">
+        <button type="button" class="btn-export" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn-run" style="width:auto;padding:8px 20px"
+                data-bs-dismiss="modal">
+          <i class="bi bi-check-lg me-1"></i>Use this Dataset
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
 </html>

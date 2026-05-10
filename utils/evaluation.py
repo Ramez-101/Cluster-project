@@ -1,9 +1,11 @@
 import numpy as np
-from scipy.spatial.distance import cdist
 from scipy.optimize import linear_sum_assignment
 from sklearn.metrics import (silhouette_score, davies_bouldin_score,
                               calinski_harabasz_score)
 from sklearn.metrics import confusion_matrix
+from utils.gpu import cdist_sqeuclidean
+
+_SILHOUETTE_SAMPLE_CAP = 20_000  # silhouette is O(n²) — sample above this size
 
 
 def clustering_accuracy_score(y_true, y_pred):
@@ -37,7 +39,7 @@ def clustering_accuracy_score(y_true, y_pred):
 
 def compute_all_metrics(X, labels, centroids, y_true=None):
     """Returns dict with wcss, silhouette, davies_bouldin, calinski_harabasz, accuracy."""
-    dists = cdist(X, centroids, 'sqeuclidean')
+    dists = cdist_sqeuclidean(X, centroids)
     wcss = float(np.sum(np.min(dists, axis=1)))
     accuracy = clustering_accuracy_score(y_true, labels)
 
@@ -51,9 +53,17 @@ def compute_all_metrics(X, labels, centroids, y_true=None):
             'accuracy': accuracy,
         }
 
+    # Silhouette is O(n²) — use a random sample for large datasets
+    if len(X) > _SILHOUETTE_SAMPLE_CAP:
+        rng = np.random.default_rng(42)
+        idx = rng.choice(len(X), size=_SILHOUETTE_SAMPLE_CAP, replace=False)
+        sil = float(silhouette_score(X[idx], labels[idx]))
+    else:
+        sil = float(silhouette_score(X, labels))
+
     return {
         'wcss': wcss,
-        'silhouette': float(silhouette_score(X, labels)),
+        'silhouette': sil,
         'davies_bouldin': float(davies_bouldin_score(X, labels)),
         'calinski_harabasz': float(calinski_harabasz_score(X, labels)),
         'accuracy': accuracy,

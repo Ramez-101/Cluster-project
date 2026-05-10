@@ -36,7 +36,7 @@ class GeneticAlgorithm(BaseClusterOptimizer):
         ub = np.tile(X.max(axis=0) + padding, self.n_clusters)
 
         pop = self._init_population(X, self.pop_size)
-        fitness = np.array([self._wcss(X, self._decode(ind, n_features)) for ind in pop])
+        fitness = self._batch_wcss(X, pop.reshape(self.pop_size, self.n_clusters, n_features))
 
         best_fitness = fitness.min()
         convergence_history = []
@@ -56,7 +56,7 @@ class GeneticAlgorithm(BaseClusterOptimizer):
                 new_pop.append(child)
 
             pop = np.array(new_pop)
-            fitness = np.array([self._wcss(X, self._decode(ind, n_features)) for ind in pop])
+            fitness = self._batch_wcss(X, pop.reshape(self.pop_size, self.n_clusters, n_features))
             best_fitness = float(fitness.min())
             convergence_history.append(best_fitness)
 

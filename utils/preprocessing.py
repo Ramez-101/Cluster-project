@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
@@ -12,12 +13,16 @@ def load_and_preprocess(filepath: str):
     y_true       : np.ndarray | None, reference labels for accuracy checks
     target_name  : str | None, name of the preserved reference label column
     """
-    try:
-        df = pd.read_csv(filepath, sep='\t')  # type: ignore[call-overload]
-        if df.shape[1] < 5:
+    ext = os.path.splitext(filepath)[1].lower()
+    if ext in ('.xlsx', '.xls'):
+        df = pd.read_excel(filepath)
+    else:
+        try:
+            df = pd.read_csv(filepath, sep='\t')  # type: ignore[call-overload]
+            if df.shape[1] < 5:
+                df = pd.read_csv(filepath, sep=',')  # type: ignore[call-overload]
+        except Exception:
             df = pd.read_csv(filepath, sep=',')  # type: ignore[call-overload]
-    except Exception:
-        df = pd.read_csv(filepath, sep=',')  # type: ignore[call-overload]
 
     y_true = None
     target_name = None
@@ -25,6 +30,7 @@ def load_and_preprocess(filepath: str):
         target_name = 'Response'
         df['__reference_target__'] = df['Response']
 
+    # ── Marketing-campaign-specific cleanup (skipped for other datasets) ──────
     drop_cols = ['ID', 'Dt_Customer', 'Z_CostContact', 'Z_Revenue',
                  'AcceptedCmp1', 'AcceptedCmp2', 'AcceptedCmp3',
                  'AcceptedCmp4', 'AcceptedCmp5', 'Response', 'Complain']
@@ -58,7 +64,29 @@ def load_and_preprocess(filepath: str):
 
     reference_target = df.pop('__reference_target__') if '__reference_target__' in df.columns else None
 
-    df = df.astype(float).dropna()
+    # ── Generic handling for any remaining non-numeric columns ───────────────
+    # Drop datetime columns (can't meaningfully cluster on raw timestamps)
+    dt_cols = [c for c in df.columns if pd.api.types.is_datetime64_any_dtype(df[c])]
+    df = df.drop(columns=dt_cols)
+
+    # Label-encode all remaining string/object columns (each unique value → integer)
+    obj_cols = df.select_dtypes(include='object').columns.tolist()
+    for col in obj_cols:
+        df[col] = pd.factorize(df[col])[0]
+
+    # Convert bool columns produced by get_dummies (older pandas compat)
+    bool_cols = df.select_dtypes(include='bool').columns.tolist()
+    if bool_cols:
+        df[bool_cols] = df[bool_cols].astype(int)
+
+    # Drop any columns that still can't be coerced (e.g. mixed types)
+    for col in df.columns:
+        try:
+            df[col] = pd.to_numeric(df[col], errors='raise')
+        except (ValueError, TypeError):
+            df = df.drop(columns=[col])
+
+    df = df.dropna()
 
     if reference_target is not None:
         reference_target = reference_target.loc[df.index]
@@ -70,7 +98,7 @@ def load_and_preprocess(filepath: str):
         y_true = pd.factorize(reference_target)[0].astype(int)
 
     feature_names = list(df.columns)
-    X_raw = df.values
+    X_raw = df.values.astype(float)
 
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X_raw)

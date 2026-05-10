@@ -19,7 +19,7 @@ class ImperialistCompetitiveAlgorithm(BaseClusterOptimizer):
         ub = np.tile(X.max(axis=0) + padding, self.n_clusters)
 
         countries = self._init_population(X, self.pop_size)
-        fitness = np.array([self._wcss(X, self._decode(c, n_features)) for c in countries])
+        fitness = self._batch_wcss(X, countries.reshape(self.pop_size, self.n_clusters, n_features))
 
         order = np.argsort(fitness)
         countries = countries[order]
@@ -47,7 +47,8 @@ class ImperialistCompetitiveAlgorithm(BaseClusterOptimizer):
         convergence_history = []
 
         for _ in range(self.max_iter):
-            # Assimilation
+            # Assimilation — collect all updated colonies, batch-evaluate, scatter back
+            all_new_cols, col_addr = [], []
             for e in range(self.n_empires):
                 if imp_fitness[e] == np.inf:
                     continue
@@ -59,15 +60,28 @@ class ImperialistCompetitiveAlgorithm(BaseClusterOptimizer):
                     noise = self.rng.uniform(-noise_scale, noise_scale, size=dim)
                     new_col = np.clip(col + step + noise, lb, ub)
                     empire_cols[e][c_idx] = new_col
-                    empire_fit[e][c_idx] = self._wcss(X, self._decode(new_col, n_features))
+                    all_new_cols.append(new_col)
+                    col_addr.append((e, c_idx))
+            if all_new_cols:
+                batch = np.array(all_new_cols).reshape(len(all_new_cols), self.n_clusters, n_features)
+                batch_fits = self._batch_wcss(X, batch)
+                for idx, (e, c_idx) in enumerate(col_addr):
+                    empire_fit[e][c_idx] = float(batch_fits[idx])
 
-            # Revolution
+            # Revolution — same collect-then-batch pattern
+            rev_cols, rev_addr = [], []
             for e in range(self.n_empires):
                 for c_idx in range(len(empire_cols[e])):
                     if self.rng.random() < self.revolution_rate:
                         new_sol = self._init_population(X, 1)[0]
                         empire_cols[e][c_idx] = new_sol
-                        empire_fit[e][c_idx] = self._wcss(X, self._decode(new_sol, n_features))
+                        rev_cols.append(new_sol)
+                        rev_addr.append((e, c_idx))
+            if rev_cols:
+                batch = np.array(rev_cols).reshape(len(rev_cols), self.n_clusters, n_features)
+                batch_fits = self._batch_wcss(X, batch)
+                for idx, (e, c_idx) in enumerate(rev_addr):
+                    empire_fit[e][c_idx] = float(batch_fits[idx])
 
             # Colony beats its imperialist
             for e in range(self.n_empires):

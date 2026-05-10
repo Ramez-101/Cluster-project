@@ -22,7 +22,7 @@ class ParticleSwarmOptimization(BaseClusterOptimizer):
         velocities = self.rng.uniform(-v_max, v_max, positions.shape)
 
         pbest = positions.copy()
-        pbest_fitness = np.array([self._wcss(X, self._decode(p, n_features)) for p in pbest])
+        pbest_fitness = self._batch_wcss(X, pbest.reshape(self.pop_size, self.n_clusters, n_features))
 
         gbest_idx = int(np.argmin(pbest_fitness))
         gbest = pbest[gbest_idx].copy()
@@ -41,7 +41,7 @@ class ParticleSwarmOptimization(BaseClusterOptimizer):
             velocities = np.clip(velocities, -v_max, v_max)
             positions = np.clip(positions + velocities, lb, ub)
 
-            fitness = np.array([self._wcss(X, self._decode(p, n_features)) for p in positions])
+            fitness = self._batch_wcss(X, positions.reshape(self.pop_size, self.n_clusters, n_features))
 
             improve = fitness < pbest_fitness
             pbest[improve] = positions[improve].copy()

@@ -39,7 +39,7 @@ class HybridGAPSO(BaseClusterOptimizer):
 
         positions = self._init_population(X, self.pop_size)
         velocities = self.rng.uniform(-v_max, v_max, positions.shape)
-        fitness = np.array([self._wcss(X, self._decode(p, n_features)) for p in positions])
+        fitness = self._batch_wcss(X, positions.reshape(self.pop_size, self.n_clusters, n_features))
 
         pbest = positions.copy()
         pbest_fitness = fitness.copy()
@@ -60,7 +60,7 @@ class HybridGAPSO(BaseClusterOptimizer):
                           + self.c2 * r2 * (gbest - positions))
             velocities = np.clip(velocities, -v_max, v_max)
             positions = np.clip(positions + velocities, lb, ub)
-            fitness = np.array([self._wcss(X, self._decode(p, n_features)) for p in positions])
+            fitness = self._batch_wcss(X, positions.reshape(self.pop_size, self.n_clusters, n_features))
 
             # GA phase: replace worst 50%
             half = self.pop_size // 2

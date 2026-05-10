@@ -30,7 +30,7 @@ class _BaseACO(BaseClusterOptimizer):
         n_samples, n_features = X.shape
 
         archive = self._init_population(X, self.pop_size)
-        fitness = np.array([self._wcss(X, self._decode(s, n_features)) for s in archive])
+        fitness = self._batch_wcss(X, archive.reshape(self.pop_size, self.n_clusters, n_features))
 
         order = np.argsort(fitness)
         archive = archive[order]
@@ -42,15 +42,13 @@ class _BaseACO(BaseClusterOptimizer):
         for _ in range(self.max_iter):
             weights = self._compute_weights(fitness)
 
-            new_ants = []
-            new_fitness = []
-            for _ in range(self.pop_size):
-                sol = self._sample_solution(archive, weights, n_features)
-                fit = self._wcss(X, self._decode(sol, n_features))
-                new_ants.append(sol)
-                new_fitness.append(fit)
+            new_ants = [self._sample_solution(archive, weights, n_features)
+                        for _ in range(self.pop_size)]
+            new_ants_arr = np.array(new_ants)
+            new_fitness  = self._batch_wcss(
+                X, new_ants_arr.reshape(self.pop_size, self.n_clusters, n_features))
 
-            all_sols = np.vstack([archive, new_ants])
+            all_sols = np.vstack([archive, new_ants_arr])
             all_fit = np.concatenate([fitness, new_fitness])
             order = np.argsort(all_fit)[:self.pop_size]
             archive = all_sols[order]
@@ -125,7 +123,7 @@ class MAXMINAntSystem(_BaseACO):
         n_samples, n_features = X.shape
 
         archive = self._init_population(X, self.pop_size)
-        fitness = np.array([self._wcss(X, self._decode(s, n_features)) for s in archive])
+        fitness = self._batch_wcss(X, archive.reshape(self.pop_size, self.n_clusters, n_features))
 
         order = np.argsort(fitness)
         archive = archive[order]
@@ -138,15 +136,13 @@ class MAXMINAntSystem(_BaseACO):
         for _ in range(self.max_iter):
             weights = self._compute_weights(fitness)
 
-            new_ants = []
-            new_fitness = []
-            for _ in range(self.pop_size):
-                sol = self._sample_solution(archive, weights, n_features)
-                fit = self._wcss(X, self._decode(sol, n_features))
-                new_ants.append(sol)
-                new_fitness.append(fit)
+            new_ants = [self._sample_solution(archive, weights, n_features)
+                        for _ in range(self.pop_size)]
+            new_ants_arr = np.array(new_ants)
+            new_fitness  = self._batch_wcss(
+                X, new_ants_arr.reshape(self.pop_size, self.n_clusters, n_features))
 
-            all_sols = np.vstack([archive, new_ants])
+            all_sols = np.vstack([archive, new_ants_arr])
             all_fit = np.concatenate([fitness, new_fitness])
             order = np.argsort(all_fit)[:self.pop_size]
             archive = all_sols[order]
@@ -162,7 +158,7 @@ class MAXMINAntSystem(_BaseACO):
             if stagnation_count >= self.stagnation_limit:
                 half = self.pop_size // 2
                 new_sols = self._init_population(X, half)
-                new_fits = np.array([self._wcss(X, self._decode(s, n_features)) for s in new_sols])
+                new_fits = self._batch_wcss(X, new_sols.reshape(half, self.n_clusters, n_features))
                 archive[half:] = new_sols
                 fitness[half:] = new_fits
                 order = np.argsort(fitness)
