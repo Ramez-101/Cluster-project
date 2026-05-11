@@ -180,6 +180,80 @@ def _save_figures(X, results, metrics_df, feature_names, scaler, k):
     plot_metrics_heatmap(metrics_df, save_dir='figures')
 
 
+def _run_param_sweep(args):
+    """Parameter sensitivity analysis: vary one parameter, run a representative subset."""
+    import matplotlib  # noqa: F401
+
+    from utils.preprocessing import load_and_preprocess
+    from utils.visualization import plot_param_sweep
+
+    os.makedirs('figures', exist_ok=True)
+
+    use_gpu = not args.no_gpu
+    from utils.gpu import GPU_AVAILABLE
+    if use_gpu and not GPU_AVAILABLE:
+        use_gpu = False
+
+    print("Loading and preprocessing data...")
+    X, feature_names, scaler, y_true, target_name = load_and_preprocess(args.data)
+    print(f"Ready: {X.shape[0]} samples × {X.shape[1]} features")
+
+    param = args.sweep_param
+    default_values = {'k': [2, 3, 4, 5, 6],
+                      'pop_size': [10, 20, 30, 50],
+                      'mutation_rate': [0.01, 0.05, 0.10, 0.20, 0.30]}
+    values = [int(v) if param in ('k', 'pop_size') else v
+              for v in (args.sweep_values or default_values[param])]
+
+    print(f"\nParameter sweep: {param} over {values}")
+    print("Algorithms: Hybrid GA-PSO, PSO, GA, MMAS, ICA, K-means, K-means++\n")
+
+    sweep_results = []
+    for val in values:
+        k        = int(val) if param == 'k'        else args.k
+        pop_size = int(val) if param == 'pop_size' else 20
+        mut_rate = float(val) if param == 'mutation_rate' else 0.10
+
+        print(f"  {param}={val}: ", end='', flush=True)
+
+        from algorithms.genetic_algorithm import GeneticAlgorithm
+        from algorithms.pso import ParticleSwarmOptimization
+        from algorithms.hybrid_ga_pso import HybridGAPSO
+        from algorithms.ant_colony import MAXMINAntSystem
+        from algorithms.imperialist_competitive import ImperialistCompetitiveAlgorithm
+        from baselines.traditional import KMeansBaseline, KMeansPlusPlusBaseline
+        from utils.evaluation import compute_all_metrics
+        import time
+
+        common = dict(n_clusters=k, max_iter=100, pop_size=pop_size,
+                      random_state=args.seed, use_gpu=use_gpu)
+        algorithms = {
+            'Hybrid GA-PSO': HybridGAPSO(**common),
+            'PSO':           ParticleSwarmOptimization(**common),
+            'GA':            GeneticAlgorithm(mutation_rate=mut_rate, **common),
+            'MMAS':          MAXMINAntSystem(**common),
+            'ICA':           ImperialistCompetitiveAlgorithm(**common),
+            'K-means':       KMeansBaseline(**common),
+            'K-means++':     KMeansPlusPlusBaseline(**common),
+        }
+
+        rows = []
+        for name, algo in algorithms.items():
+            labels, centroids, _ = algo.fit(X)
+            m = compute_all_metrics(X, labels, centroids, y_true=y_true)
+            m['algorithm'] = name
+            rows.append(m)
+            print(f"{name}({m['wcss']:.0f}) ", end='', flush=True)
+        print()
+
+        import pandas as pd
+        mdf = pd.DataFrame(rows).set_index('algorithm')
+        sweep_results.append(mdf)
+
+    plot_param_sweep(sweep_results, param, values, save_dir='figures')
+    print(f"\nSweep figure saved: figures/param_sweep_{param}.png")
+
+
 def main():
     parser = argparse.ArgumentParser(description='Customer Segmentation with CI/EC Algorithms')
     parser.add_argument('--data', default='data/marketing_campaign.csv')
@@ -195,6 +269,15 @@ def main():
                         help='Run algorithms in parallel using multiple threads')
     parser.add_argument('--workers',  type=int, default=3,
                         help='Number of parallel worker threads (default: 3)')
+    # Parameter sweep
+    parser.add_argument('--param-sweep', action='store_true',
+                        help='Run parameter sensitivity analysis instead of standard run')
+    parser.add_argument('--sweep-param', default='k',
+                        choices=['k', 'pop_size', 'mutation_rate'],
+                        help='Parameter to sweep (default: k)')
+    parser.add_argument('--sweep-values', nargs='+', type=float,
+                        metavar='V',
+                        help='Values to sweep over (default depends on --sweep-param)')
     args = parser.parse_args()
 
     try:
@@ -215,6 +298,10 @@ def main():
         print("  kaggle datasets download -d imakash3011/customer-personality-analysis -p data/ --unzip")
         print("\nOr place marketing_campaign.csv in the data/ folder manually.")
         sys.exit(1)
+
+    if args.param_sweep:
+        _run_param_sweep(args)
+        return
 
     use_gpu = not args.no_gpu
     from utils.gpu import GPU_AVAILABLE

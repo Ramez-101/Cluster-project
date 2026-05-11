@@ -49,7 +49,7 @@ GROUPS = {
 }
 
 
-def _build_algo(key, common):
+def     _build_algo(key, common):
     from algorithms.harmony_search       import HarmonySearch
     from algorithms.extremal_optimization import ExtremalOptimization, TauExtremalOptimization
     from algorithms.imperialist_competitive import ImperialistCompetitiveAlgorithm

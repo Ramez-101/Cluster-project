@@ -168,6 +168,56 @@ def plot_cluster_profiles(X, labels, centroids, feature_names, scaler, save_dir=
     _save(fig, os.path.join(save_dir, 'cluster_profiles.png'))
 
 
+def plot_param_sweep(sweep_results, param_name, param_values, save_dir='figures'):
+    """
+    Plot parameter sensitivity analysis.
+
+    sweep_results : list of metrics_df (one per param value, indexed by algorithm)
+    param_name    : str, e.g. 'k', 'pop_size', 'mutation_rate'
+    param_values  : list of values matching sweep_results
+    """
+    import pandas as pd
+
+    metrics_to_plot = [
+        ('wcss', 'WCSS (↓ lower is better)', False),
+        ('silhouette', 'Silhouette (↑ higher is better)', True),
+    ]
+
+    ci_algorithms = ['Hybrid GA-PSO', 'PSO', 'GA', 'MMAS', 'ICA']
+    baseline_algorithms = ['K-means', 'K-means++']
+
+    all_names = sweep_results[0].index.tolist()
+    plot_algos = [a for a in ci_algorithms if a in all_names] + \
+                 [a for a in baseline_algorithms if a in all_names]
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    cmap = plt.get_cmap('tab10')
+
+    for ax, (col, title, higher) in zip(axes, metrics_to_plot):
+        for i, algo in enumerate(plot_algos):
+            vals = []
+            for mdf in sweep_results:
+                v = mdf.loc[algo, col] if (algo in mdf.index and col in mdf.columns) else float('nan')
+                vals.append(v)
+            style = '-o' if algo not in baseline_algorithms else '--s'
+            ax.plot(param_values, vals, style, label=algo,
+                    color=cmap(i / max(len(plot_algos), 1)), linewidth=2, markersize=6)
+
+        ax.set_xlabel(param_name, fontsize=11)
+        ax.set_ylabel(col, fontsize=11)
+        ax.set_title(title, fontsize=11)
+        ax.legend(fontsize=8, loc='best')
+        ax.grid(alpha=0.3)
+        if param_name == 'k':
+            ax.set_xticks(param_values)
+
+    fig.suptitle(f'Parameter Sensitivity: {param_name}', fontsize=13, fontweight='bold')
+    fig.tight_layout()
+    fname = f'param_sweep_{param_name}.png'
+    _save(fig, os.path.join(save_dir, fname))
+    return fname
+
+
 def plot_metrics_heatmap(metrics_df, save_dir='figures'):
     import seaborn as sns
 
